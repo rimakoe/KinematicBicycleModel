@@ -1,0 +1,43 @@
+FROM ros:melodic-ros-core-bionic
+
+RUN sudo apt update && sudo apt upgrade -y
+
+RUN sudo apt install software-properties-common -y
+RUN sudo add-apt-repository ppa:deadsnakes/ppa -y
+
+# Python 2.7.17
+RUN sudo apt-get update && sudo apt-get install --yes \
+    python-pip \
+    python-virtualenv
+
+# Python 3.8.0
+RUN sudo apt update && sudo apt install --yes \
+    python3-pip \
+    python3-venv
+
+RUN apt-get update && apt-get install --yes \
+        wget
+
+RUN sudo apt update -y && sudo apt upgrade -y && \
+    apt-get install -y wget build-essential checkinstall  libreadline-gplv2-dev  libncursesw5-dev  libssl-dev  libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev && \
+    cd /usr/src && \
+    sudo wget https://www.python.org/ftp/python/3.10.11/Python-3.10.11.tgz && \
+    sudo tar xzf Python-3.10.11.tgz && \
+    cd Python-3.10.11 && \
+    sudo ./configure --enable-optimizations --prefix=/usr && \
+    sudo make altinstall
+
+# Set Python 3.8.0 as default. Python 3.6.9 is default in Ubuntu 18.04
+RUN sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+RUN sudo update-alternatives  --set python3 /usr/bin/python3.10
+
+# pip update
+#RUN python -m pip install --upgrade pip
+RUN python3 -m pip install --upgrade pip
+
+RUN sudo apt-get update && sudo apt-get install -y git
+
+RUN git config --global --add safe.directory /workspaces/KinematicBicycleModel/libs/car_description
+RUN git config --global --add safe.directory /workspaces/KinematicBicycleModel/libs/normalise_angle
+RUN git config --global --add safe.directory /workspaces/KinematicBicycleModel/libs/SciPyCubicSpline
+

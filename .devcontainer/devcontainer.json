@@ -1,0 +1,47 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile
+{
+	"image": "bicycle_model_simulation",
+	"name": "bicycle_model_simulation",
+	"build": {
+		"context": "..",
+		"dockerfile": "../Dockerfile.base",
+	},
+	"runArgs": [
+		"-it",
+		"--rm",
+		"--privileged",
+		"--net",
+		"host",
+		"-e",
+		"DISPLAY=${localEnv:DISPLAY}",
+		"-e",
+		"QT_X11_NO_MITSHM=1",
+		"-v",
+		"/tmp/.X11-unix:/tmp/.X11-unix:rw",
+		"-e",
+		"SSH_AUTH_SOCKER=$SSH_AUTH_SOCKET",
+		"-v",
+		"${localEnv:HOME}/.ssh:/home/.ssh",
+		"-v",
+		"${localEnv:HOME}/.gitconfig:/etc/gitconfig"
+	],
+	//"workspaceMount": "source=.,target=/home/vdi-cup,type=bind",
+	//"workspaceFolder": "/home/vdi-cup/",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"ms-vscode.cmake-tools",
+				"mhutchie.git-graph",
+				"waderyan.gitblame",
+				"DavidAnson.vscode-markdownlint",
+				"ms-iot.vscode-ros",
+				"augustocdias.tasks-shell-input",
+				"SanaAjani.taskrunnercode",
+				"cnshenj.vscode-task-manager"
+			]
+		}
+	}
+}
