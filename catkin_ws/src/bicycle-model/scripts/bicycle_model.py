@@ -1,6 +1,7 @@
-from math import cos, sin, tan
+#!/usr/bin/env python3
 
-from libs import normalise_angle
+from math import cos, sin, tan
+from utils import normalise_angle
 
 
 class KinematicBicycleModel:
@@ -69,3 +70,6 @@ class KinematicBicycleModel:
         new_yaw = normalise_angle(yaw + angular_velocity*self.delta_time)
         
         return new_x, new_y, new_yaw, new_velocity, steering_angle, angular_velocity
+
+if __name__=="__main__":
+    pass

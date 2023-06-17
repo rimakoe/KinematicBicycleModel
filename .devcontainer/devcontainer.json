@@ -26,8 +26,6 @@
 		"-v",
 		"${localEnv:HOME}/.gitconfig:/etc/gitconfig"
 	],
-	//"workspaceMount": "source=.,target=/home/vdi-cup,type=bind",
-	//"workspaceFolder": "/home/vdi-cup/",
 	"customizations": {
 		"vscode": {
 			"extensions": [

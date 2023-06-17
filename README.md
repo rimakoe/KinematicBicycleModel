@@ -56,27 +56,82 @@ Just like with all other bicycle models, this model is a discrete model and lose
 
 ## Requirements
 
-The model itself has zero dependencies and can run its fastest on vanilla python. However, to support type-hinting, Python 3.10 or greater is required.
+- Docker
+- SSH key to your GitHub account
 
-## Demo
+## Installation
 
-Recursively git clone the repository
+1. Enable on host machine outside of container
 
-```bash
-git clone --recursive https://github.com/winstxnhdw/KinematicBicycleModel.git
-```
+    ```(cmd)
+    xhost +
+    ```
 
-Install the requirements
+1. Change the directory to the repostiroy main directory.
 
-```bash
-pip install -r requirements.txt
-```
+    ```(cmd)
+    cd /directory/to/KinematicBicycleModel
+    ```
 
-Play the animation
+1. Open vs code.
 
-```bash
-python animate.py
-```
+    ```(cmd)
+    code .
+    ```
+
+1. Install the [Dev Container Extension](https://code.visualstudio.com/docs/devcontainers/containers) from VS Code and execute Crtl + Shift + P -> Reopen folder in container.
+
+1. Make everything executable with:
+
+    ```(cmd)
+    source ./make_all_executable.sh
+    ```
+
+1. Create the needed python environments for all submodules with:
+
+    ```(cmd)
+    source ./setup_environments.sh
+    ```
+
+1. Change the directory to mxck_ws.
+
+    ```(cmd)
+    cd mxck_ws
+    ```
+
+1. The ```catkin``` command should be recognized by the system. You can verify that via the autocomplete function using 'Tab' button on your keyboard. Configure the catkin build With the following command
+
+    ```(cmd)
+    catkin config -DPYTHON_EXECUTABLE=/usr/bin/python3.10 -DPYTHON_INCLUDE_DIR=/usr/include/python3.10 -DPYTHON_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.10.so -DSETUPTOOLS_DEB_LAYOUT=OFF
+    ```
+
+1. Build the ROS catkin
+
+    ```(cmd)
+    catkin build
+    ```
+
+    Otherwise
+
+    ```(cmd)
+    source /opt/ros/melodic/setup.sh
+    ```
+
+    And then execute it.
+
+    All packages should build now. This takes a few seconds.
+
+1. Execute the following command to get the autofill features of ROS:
+
+    ```(cmd)
+    source ./devel/setup.bash
+    ```
+
+1. Finally play the animation via ROS.
+
+    ```bash
+    roslaunch bicycle_model animation.launch
+    ```
 
 ## Concept
 

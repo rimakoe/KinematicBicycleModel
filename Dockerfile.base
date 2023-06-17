@@ -41,3 +41,25 @@ RUN git config --global --add safe.directory /workspaces/KinematicBicycleModel/l
 RUN git config --global --add safe.directory /workspaces/KinematicBicycleModel/libs/normalise_angle
 RUN git config --global --add safe.directory /workspaces/KinematicBicycleModel/libs/SciPyCubicSpline
 
+RUN sudo apt-get update && sudo apt-get install -y python3-yaml
+RUN pip install rospkg catkin_pkg
+
+RUN sudo apt-get update && sudo apt-get install -y \
+    ros-melodic-catkin \
+    python-catkin-tools 
+
+RUN sudo ln -s /usr/share/pyshared/lsb_release.py /usr/lib/python3.10/site-packages/lsb_release.py
+
+# Some stuff for display forwarding
+run sudo apt-get update && sudo apt-get install -y \
+    '^libxcb.*-dev' \
+    libx11-xcb-dev \
+    libglu1-mesa-dev \
+    libxrender-dev \
+    libxi-dev \
+    libxkbcommon-dev \
+    libxkbcommon-x11-dev
+
+RUN echo "source /opt/ros/melodic/setup.bash" >> ~/.bashrc
+RUN echo "source /workspaces/KinematicBicycleModel/catkin_ws/devel/setup.bash" >> ~/.bashrc
+RUN echo "alias as_setup=\"source /workspaces/KinematicBicycleModel/catkin_ws/devel/setup.bash\"" >> ~/.bashrc

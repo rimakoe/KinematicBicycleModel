@@ -1,3 +1,5 @@
+#!/usr/bin/env /workspaces/KinematicBicycleModel/catkin_ws/src/bicycle-model/venv/bin/python3
+
 # pylint: skip-file
 from csv import reader
 from dataclasses import dataclass
@@ -6,9 +8,10 @@ from math import radians
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-from kinematic_model import KinematicBicycleModel
-from libs import CarDescription, StanleyController, generate_cubic_spline
-
+from bicycle_model import KinematicBicycleModel
+from car_description import CarDescription
+from cubic_spline_interpolator import generate_cubic_spline
+from stanley_controller import StanleyController
 
 class Simulation:
 
@@ -28,7 +31,7 @@ class Path:
     def __init__(self):
 
         # Get path to waypoints.csv
-        with open('data/waypoints.csv', newline='') as f:
+        with open('/workspaces/KinematicBicycleModel/catkin_ws/src/bicycle-model/data/waypoints.csv', newline='') as f:
             rows = list(reader(f, delimiter=','))
 
         ds = 0.05
