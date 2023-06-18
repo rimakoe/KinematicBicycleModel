@@ -1,6 +1,9 @@
-#!/usr/bin/env /workspaces/KinematicBicycleModel/catkin_ws/src/bicycle-model/venv/bin/python3
+#!/usr/bin/env /workspaces/KinematicBicycleModel/catkin_ws/src/simulation/bicycle-model/venv/bin/python3
 
-# pylint: skip-file
+# IDEA: 
+# - The simulation runs with a steady fps rate that is configurable.
+# - The Input values
+
 from csv import reader
 from dataclasses import dataclass
 from math import radians
@@ -10,13 +13,22 @@ from matplotlib.animation import FuncAnimation
 
 from bicycle_model import KinematicBicycleModel
 from car_description import CarDescription
-from cubic_spline_interpolator import generate_cubic_spline
-from stanley_controller import StanleyController
+from vesc_msgs.msg import VescStateStamped
+from ackermann_msgs.msg import AckermannDriveStamped
+from sensor_msgs.msg import Imu
+import rospy
 
 class Simulation:
 
     def __init__(self):
+        
+        # Outport
+        self.publisher_vesc = rospy.Publisher('/as_simulation/vesc_msgs/VescStateStamped', VescStateStamped, queue_size=1) 
+        self.publisher_imu = rospy.Publisher('/as_simulation/imu', Imu, queue_size=1) 
 
+        # Inport
+        self.subscriber_ackermann = rospy.Subscriber('/as_vehicle_control/output/ackermann_cmd', AckermannDriveStamped, self.update_inputs)
+        
         fps = 50.0
 
         self.dt = 1/fps
@@ -24,24 +36,19 @@ class Simulation:
         self.map_size_y = 40
         self.frames = 2500
         self.loop = False
-
-
-class Path:
-
-    def __init__(self):
-
-        # Get path to waypoints.csv
-        with open('/workspaces/KinematicBicycleModel/catkin_ws/src/bicycle-model/data/waypoints.csv', newline='') as f:
-            rows = list(reader(f, delimiter=','))
-
-        ds = 0.05
-        x, y = [[float(i) for i in row] for row in zip(*rows[1:])]
-        self.px, self.py, self.pyaw, _ = generate_cubic_spline(x, y, ds)
-
-
+        
+        self.steering_angle = 0
+        self.speed = 0
+        self.timestamp = 0
+    
+    def update_inputs(self, data : AckermannDriveStamped):
+        self.steering_angle = data.drive.steering_angle
+        self.speed = data.drive.speed
+        self.timestamp = data.header.stamp
+    
 class Car:
 
-    def __init__(self, init_x, init_y, init_yaw, px, py, pyaw, delta_time):
+    def __init__(self, init_x, init_y, init_yaw, delta_time):
 
         # Model parameters
         self.x = init_x
@@ -57,19 +64,8 @@ class Car:
 
         # Acceleration parameters
         target_velocity = 10.0
-        self.time_to_reach_target_velocity = 5.0
+        self.time_to_reach_target_velocity = 1.0
         self.required_acceleration = target_velocity / self.time_to_reach_target_velocity
-
-        # Tracker parameters
-        self.px = px
-        self.py = py
-        self.pyaw = pyaw
-        self.k = 8.0
-        self.ksoft = 1.0
-        self.kyaw = 0.01
-        self.ksteer = 0.0
-        self.crosstrack_error = None
-        self.target_id = None
 
         # Description parameters
         self.colour = 'black'
@@ -80,7 +76,6 @@ class Car:
         axle_track = 1.7
         rear_overhang = 0.5 * (overall_length - wheelbase)
 
-        self.tracker = StanleyController(self.k, self.ksoft, self.kyaw, self.ksteer, max_steer, wheelbase, self.px, self.py, self.pyaw)
         self.kinematic_bicycle_model = KinematicBicycleModel(wheelbase, max_steer, self.delta_time)
         self.description = CarDescription(overall_length, overall_width, rear_overhang, tyre_diameter, tyre_width, axle_track, wheelbase)
 
@@ -96,20 +91,16 @@ class Car:
         return self.description.plot_car(self.x, self.y, self.yaw, self.wheel_angle)
 
 
-    def drive(self):
+    def drive(self, throttle, wheel_angle):
         
         acceleration = 0 if self.time > self.time_to_reach_target_velocity else self.get_required_acceleration()
-        self.wheel_angle, self.target_id, self.crosstrack_error = self.tracker.stanley_control(self.x, self.y, self.yaw, self.velocity, self.wheel_angle)
-        self.x, self.y, self.yaw, self.velocity, _, _ = self.kinematic_bicycle_model.update(self.x, self.y, self.yaw, self.velocity, acceleration, self.wheel_angle)
-
-        print(f"Cross-track term: {self.crosstrack_error}{' '*10}", end="\r")
+        self.x, self.y, self.yaw, self.velocity, _, _ = self.kinematic_bicycle_model.update(self.x, self.y, self.yaw, self.velocity, acceleration, wheel_angle)
 
 
 @dataclass
 class Fargs:
     ax: plt.Axes
     sim: Simulation
-    path: Path
     car: Car
     car_outline: plt.Line2D
     front_right_wheel: plt.Line2D
@@ -121,11 +112,10 @@ class Fargs:
     target: plt.Line2D
    
 
-def animate(frame, fargs):
+def animate(frame, fargs : Fargs):
 
     ax                = fargs.ax
     sim               = fargs.sim
-    path              = fargs.path
     car               = fargs.car
     car_outline       = fargs.car_outline
     front_right_wheel = fargs.front_right_wheel
@@ -134,14 +124,21 @@ def animate(frame, fargs):
     rear_left_wheel   = fargs.rear_left_wheel
     rear_axle         = fargs.rear_axle
     annotation        = fargs.annotation
-    target            = fargs.target
 
     # Camera tracks car
     ax.set_xlim(car.x - sim.map_size_x, car.x + sim.map_size_x)
     ax.set_ylim(car.y - sim.map_size_y, car.y + sim.map_size_y)
 
-    # Drive and draw car
-    car.drive()
+    # Drive
+    car.drive(0, sim.steering_angle)
+    
+    vesc_message = VescStateStamped()
+    vesc_message.state.speed = sim.speed
+    vesc_message.header.stamp = rospy.Time.now()
+
+    sim.publisher_vesc.publish(vesc_message)
+    
+    # Draw
     outline_plot, fr_plot, rr_plot, fl_plot, rl_plot = car.plot_car()
     car_outline.set_data(*outline_plot)
     front_right_wheel.set_data(*fr_plot)
@@ -150,25 +147,21 @@ def animate(frame, fargs):
     rear_left_wheel.set_data(*rl_plot)
     rear_axle.set_data(car.x, car.y)
 
-    # Show car's target
-    target.set_data(path.px[car.target_id], path.py[car.target_id])
-
     # Annotate car's coordinate above car
     annotation.set_text(f'{car.x:.1f}, {car.y:.1f}')
     annotation.set_position((car.x, car.y + 5))
 
     plt.title(f'{sim.dt*frame:.2f}s', loc='right')
     plt.xlabel(f'Speed: {car.velocity:.2f} m/s', loc='left')
-    # plt.savefig(f'image/visualisation_{frame:03}.png', dpi=300)
 
-    return car_outline, front_right_wheel, rear_right_wheel, front_left_wheel, rear_left_wheel, rear_axle, target,
+    return car_outline, front_right_wheel, rear_right_wheel, front_left_wheel, rear_left_wheel, rear_axle,
 
 
-def main():
-    
+if __name__ == '__main__':
+    rospy.init_node('as_vehicle_simulation', anonymous=True)
+
     sim  = Simulation()
-    path = Path()
-    car  = Car(path.px[0], path.py[0], path.pyaw[0], path.px, path.py, path.pyaw, sim.dt)
+    car  = Car(0, 0, 0, sim.dt)
 
     interval = sim.dt * 10**3
 
@@ -178,7 +171,6 @@ def main():
 
     road = plt.Circle((0, 0), 50, color='gray', fill=False, linewidth=30)
     ax.add_patch(road)
-    ax.plot(path.px, path.py, '--', color='gold')
 
     empty              = ([], [])
     target,            = ax.plot(*empty, '+r')
@@ -193,7 +185,6 @@ def main():
     fargs = [Fargs(
         ax=ax,
         sim=sim,
-        path=path,
         car=car,
         car_outline=car_outline,
         front_right_wheel=front_right_wheel,
@@ -211,6 +202,3 @@ def main():
     plt.grid()
     plt.show()
 
-
-if __name__ == '__main__':
-    main()

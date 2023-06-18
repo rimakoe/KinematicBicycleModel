@@ -1,0 +1,6 @@
+<launch>
+
+  <!--bicycle model-->
+  <node pkg="as_simulation" type="animate.py" name="as_bicycle_model_animation" required="true" />
+
+</launch>

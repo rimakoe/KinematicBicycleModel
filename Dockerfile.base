@@ -34,6 +34,7 @@ RUN sudo update-alternatives  --set python3 /usr/bin/python3.10
 # pip update
 #RUN python -m pip install --upgrade pip
 RUN python3 -m pip install --upgrade pip
+RUN python3 -m pip install empy
 
 RUN sudo apt-get update && sudo apt-get install -y git
 
@@ -63,3 +64,6 @@ run sudo apt-get update && sudo apt-get install -y \
 RUN echo "source /opt/ros/melodic/setup.bash" >> ~/.bashrc
 RUN echo "source /workspaces/KinematicBicycleModel/catkin_ws/devel/setup.bash" >> ~/.bashrc
 RUN echo "alias as_setup=\"source /workspaces/KinematicBicycleModel/catkin_ws/devel/setup.bash\"" >> ~/.bashrc
+
+RUN apt-get update && apt-get install -y \
+    ros-melodic-ackermann-msgs
