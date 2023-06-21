@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
     rospy
     std_msgs
     vesc_msgs
+    as_state_estimation_msg
 )
 
 ## System dependencies are found with CMake's conventions

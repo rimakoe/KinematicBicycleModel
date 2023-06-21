@@ -16,6 +16,7 @@
   <license>TODO</license>
 
   <depend>vesc_msgs</depend>
+  <depend>as_state_estimation_msg</depend>
   <!-- Url tags are optional, but multiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
