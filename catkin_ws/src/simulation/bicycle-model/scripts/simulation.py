@@ -3,6 +3,7 @@
 # IDEA: 
 # - The simulation runs with a steady fps rate that is configurable.
 # - The Input values
+from time import time_ns
 
 from csv import reader
 from dataclasses import dataclass
@@ -20,51 +21,24 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped, Point
 import rospy
 import numpy as np
-class Simulation:
+from watchdog import Watchdog
 
-    def __init__(self):
-        # Outport
-        self.publisher_state_estimation = rospy.Publisher('/as_simulation/output/StateEstimationStamped', StateEstimationStamped, queue_size=1) 
 
-        # Inport
-        self.subscriber_ackermann = rospy.Subscriber('/as_vehicle_control/output/ackermann_cmd', AckermannDriveStamped, self.update_inputs)
-        self.subscriber_path = rospy.Subscriber('/fake/as_path_planning/output/Path', Path, self.update_path)
-        self.subscriber_target_point = rospy.Subscriber('/as_vehicle_control/output/TargetPoint', Point, self.update_target_point)
-
-        fps = 50.0
-
-        self.dt = 1/fps
-        self.map_size_x = 70
-        self.map_size_y = 40
-        self.frames = 2500
-        self.loop = False
-        
-        self.steering_angle = 0
-        self.speed = 0
-        self.timestamp = 0
-        self.path = Path()
-        self.target_point = Point()
-    
-    def update_inputs(self, data : AckermannDriveStamped):
-        self.steering_angle = data.drive.steering_angle
-        self.speed = data.drive.speed
-        self.timestamp = data.header.stamp
-        
-    def update_path(self, data : Path):
-        self.path = data
-
-    def update_target_point(self, data : Point):
-        self.target_point = data
-    
 class Car:
 
-    def __init__(self, init_x, init_y, init_yaw, delta_time):
+    def __init__(self, init_x, init_y, init_yaw, sample_time):
+
+        self.__x_init = init_x
+        self.__y_init = init_y
+        self.__yaw_init = init_yaw
 
         # Model parameters
         self.x = init_x
         self.y = init_y
         self.yaw = init_yaw
-        self.delta_time = delta_time
+
+        #
+        self.sample_time = sample_time
         self.time = 0.0
         self.velocity = 0.0
         self.wheel_angle = 0.0
@@ -86,26 +60,86 @@ class Car:
         axle_track = 1.7
         rear_overhang = 0.5 * (overall_length - wheelbase)
 
-        self.kinematic_bicycle_model = KinematicBicycleModel(wheelbase, max_steer, self.delta_time)
+        self.kinematic_bicycle_model = KinematicBicycleModel(wheelbase, max_steer, self.sample_time)
         self.description = CarDescription(overall_length, overall_width, rear_overhang, tyre_diameter, tyre_width, axle_track, wheelbase)
 
-    
-    def get_required_acceleration(self):
+    def reset(self):
+        self.x = self.__x_init
+        self.y = self.__y_init
+        self.yaw = self.__yaw_init
+        self.wheel_angle = 0.0
 
-        self.time += self.delta_time
+
+    def set_sample_time(self, sample_time):
+        self.sample_time = sample_time
+
+    def get_required_acceleration(self):
+        self.time += self.sample_time
         return self.required_acceleration
     
-
     def plot_car(self):
-        
         return self.description.plot_car(self.x, self.y, self.yaw, self.wheel_angle)
 
-
     def drive(self, throttle, wheel_angle):
-        
         acceleration = 0 if self.time > self.time_to_reach_target_velocity else self.get_required_acceleration()
         self.x, self.y, self.yaw, self.velocity, _, _ = self.kinematic_bicycle_model.update(self.x, self.y, self.yaw, self.velocity, acceleration, wheel_angle)
 
+
+class Simulation:
+
+    FPS = 50
+    SAMPLE_TIME = 1/FPS
+
+    def __init__(self):
+
+        # Outport
+        self.publisher_state_estimation = rospy.Publisher('/as_simulation/output/StateEstimationStamped', StateEstimationStamped, queue_size=1) 
+
+        # Inport
+        self.subscriber_ackermann = rospy.Subscriber('/as_vehicle_control/output/ackermann_cmd', AckermannDriveStamped, self.update_inputs)
+        self.subscriber_path = rospy.Subscriber('/fake/as_path_planning/output/Path', Path, self.update_path)
+        self.subscriber_target_point = rospy.Subscriber('/as_vehicle_control/output/TargetPoint', Point, self.update_target_point)
+
+        self.map_size_x = 70
+        self.map_size_y = 40
+        self.frames = 5000
+        self.loop = False
+
+        self.steering_angle = 0
+        self.speed = 0
+        self.timestamp = 0
+        self.path = Path()
+        self.target_point = Point()
+
+        # violation = lambda : print("violated")
+        self.watchdog = Watchdog(self.reset_ego_car_pose)
+        
+    def start(self):
+        self.watchdog.start()
+
+    def set_ego_car(self, ego_car: Car):
+        self.ego_car = ego_car
+
+    def reset_ego_car_pose(self):
+        self.ego_car.x = 0
+        self.ego_car.y = 0
+        self.ego_car.yaw = 0
+    
+    def reset(self) -> bool:
+        return self.__reset
+
+    def update_inputs(self, data : AckermannDriveStamped):
+        self.watchdog.trigger()
+
+        self.steering_angle = data.drive.steering_angle
+        self.speed = data.drive.speed
+        self.timestamp = data.header.stamp
+        
+    def update_path(self, data : Path):
+        self.path = data
+
+    def update_target_point(self, data : Point):
+        self.target_point = data
 
 @dataclass
 class Fargs:
@@ -121,6 +155,7 @@ class Fargs:
     annotation: plt.Annotation
     target_point: plt.Line2D
     desired_path: plt.Line2D
+    is_alive : callable
    
 
 def animate(frame, fargs : Fargs):
@@ -137,10 +172,21 @@ def animate(frame, fargs : Fargs):
     annotation        = fargs.annotation
     target_point      = fargs.target_point
     desired_path      = fargs.desired_path
+    is_alive = fargs.is_alive
+
 
     # Camera tracks car
     ax.set_xlim(car.x - sim.map_size_x, car.x + sim.map_size_x)
     ax.set_ylim(car.y - sim.map_size_y, car.y + sim.map_size_y)
+
+    if(not is_alive()):
+        car.x = 0.0
+        car.y = -2.0
+        car.yaw = 0.0
+        car.wheel_angle = 0.0
+        sim.watchdog.reset()
+        sim.watchdog.start()
+
 
     # Drive
     car.drive(0, sim.steering_angle)
@@ -179,7 +225,7 @@ def animate(frame, fargs : Fargs):
     annotation.set_text(f'{car.x:.1f}, {car.y:.1f}')
     annotation.set_position((car.x, car.y + 5))
     
-    plt.title(f'{sim.dt*frame:.2f}s', loc='right')
+    plt.title(f'{sim.SAMPLE_TIME*frame:.2f}s', loc='right')
     plt.xlabel(f'Speed: {car.velocity:.2f} m/s', loc='left')
 
     return car_outline, front_right_wheel, rear_right_wheel, front_left_wheel, rear_left_wheel, rear_axle, desired_path,
@@ -188,12 +234,16 @@ def animate(frame, fargs : Fargs):
 if __name__ == '__main__':
     rospy.init_node('as_vehicle_simulation', anonymous=True)
 
-    sim  = Simulation()
-    car  = Car(0, -2, 0, sim.dt)
-    
-    
+    x_init = 0
+    y_init = -2
+    yaw_init = 0
 
-    interval = sim.dt * 10**3
+
+    simulation  = Simulation()
+    ego_car  = Car(x_init, y_init, yaw_init, simulation.SAMPLE_TIME)
+    simulation.set_ego_car(ego_car)
+
+    interval = simulation.SAMPLE_TIME * 10**3
 
     fig = plt.figure()
     ax = plt.axes()
@@ -204,19 +254,19 @@ if __name__ == '__main__':
 
     empty              = ([], [])
     target,            = ax.plot(*empty, '+r')
-    car_outline,       = ax.plot(*empty, color=car.colour)
-    front_right_wheel, = ax.plot(*empty, color=car.colour)
-    rear_right_wheel,  = ax.plot(*empty, color=car.colour)
-    front_left_wheel,  = ax.plot(*empty, color=car.colour)
-    rear_left_wheel,   = ax.plot(*empty, color=car.colour)
-    rear_axle,         = ax.plot(car.x, car.y, '+', color=car.colour, markersize=2)
-    annotation         = ax.annotate(f'{car.x:.1f}, {car.y:.1f}', xy=(car.x, car.y + 5), color='black', annotation_clip=False)
+    car_outline,       = ax.plot(*empty, color=ego_car.colour)
+    front_right_wheel, = ax.plot(*empty, color=ego_car.colour)
+    rear_right_wheel,  = ax.plot(*empty, color=ego_car.colour)
+    front_left_wheel,  = ax.plot(*empty, color=ego_car.colour)
+    rear_left_wheel,   = ax.plot(*empty, color=ego_car.colour)
+    rear_axle,         = ax.plot(ego_car.x, ego_car.y, '+', color=ego_car.colour, markersize=2)
+    annotation         = ax.annotate(f'{ego_car.x:.1f}, {ego_car.y:.1f}', xy=(ego_car.x, ego_car.y + 5), color='black', annotation_clip=False)
     desired_path,       = ax.plot(*empty, 'b')
     
     fargs = [Fargs(
         ax=ax,
-        sim=sim,
-        car=car,
+        sim=simulation,
+        car=ego_car,
         car_outline=car_outline,
         front_right_wheel=front_right_wheel,
         front_left_wheel=front_left_wheel,
@@ -225,10 +275,13 @@ if __name__ == '__main__':
         rear_axle=rear_axle,
         annotation=annotation,
         target_point=target,
-        desired_path=desired_path
+        desired_path=desired_path,
+        is_alive=simulation.watchdog.is_alive
     )]
 
-    _ = FuncAnimation(fig, animate, frames=sim.frames, init_func=lambda: None, fargs=fargs, interval=interval, repeat=sim.loop)
+    simulation.start()
+
+    _ = FuncAnimation(fig, animate, frames=simulation.frames, init_func=lambda: None, fargs=fargs, interval=interval, repeat=simulation.loop)
     # anim.save('animation.gif', writer='imagemagick', fps=50)
     
     plt.grid()
